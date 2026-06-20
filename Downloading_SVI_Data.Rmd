@@ -81,9 +81,9 @@ svi_zcta <- svi_zcta %>%
 Whenever we manipulate data, we save a copy of the data that we know we're going to need in the future so we don't have to run this code every single time. Below is a general format of how you create a new csv file / dataset.
 ```{r}
 #census level data 
-write.csv(svi_census, file = "svi_2022_census.csv", row.names = FALSE) 
+write.csv(svi_census, file = "svi_sf_2022_census.csv", row.names = FALSE) 
 
 #zcta level data 
-write.csv(svi_zcta, file = "svi_2022_zcta.csv", row.names = FALSE)
+write.csv(svi_zcta, file = "svi_sf_2022_zcta.csv", row.names = FALSE)
 ```
 
