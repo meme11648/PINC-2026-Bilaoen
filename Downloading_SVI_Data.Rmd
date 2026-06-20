@@ -35,7 +35,7 @@ svi_census <- svi_census %>%
   filter(site != "6075980401") #removing the Farallones islands 
 ```
 
-##Zipcode Level filter
+##ZCTA (Zipcode Tabulation Area / Zipcode) Level filter
 ```{r}
 svi_zcta <-  svi_zcta %>% 
   filter(grepl("^941", FIPS)) %>% #filtering out for zipcodes that start with 941 in the FIPS column 
@@ -75,5 +75,15 @@ svi_zcta <- svi_zcta %>%
     RPL_THEME3 = na_if(RPL_THEME3, -999), 
     RPL_THEME4 = na_if(RPL_THEME4, -999)) %>% 
   select(FIPS,RPL_THEMES,RPL_THEME1,RPL_THEME2,RPL_THEME3,RPL_THEME4) #only keeping major themes for SVI 
+```
+
+#Saving Copies of SF SVI Data Only 
+Whenever we manipulate data, we save a copy of the data that we know we're going to need in the future so we don't have to run this code every single time. Below is a general format of how you create a new csv file / dataset.
+```{r}
+#census level data 
+write.csv(svi_census, file = "svi_2022_census.csv", row.names = FALSE) 
+
+#zcta level data 
+write.csv(svi_zcta, file = "svi_2022_zcta.csv", row.names = FALSE)
 ```
 
