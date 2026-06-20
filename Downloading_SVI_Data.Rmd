@@ -1,0 +1,79 @@
+---
+title: "Downloading SVI Data"
+author: "Mahal Bilaoen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+#Package Loading In most cases, many coders prefer to load in all of their packages at the very beginning chunk. This is so that whenever code is being opened and revisited, code can run smoothly without having to wait for packages to be downloaded or loaded into the workspace. Many r coders use a package called "Pacman", which loads and downloads packages in a single line of code.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#install.packages(pacman)
+pacman::p_load(tidyverse)
+```
+
+#Reading in SVI Data
+Options to filter out by zipcode or by census tract. 
+```{r}
+svi_census <- read.csv("~/PH 699 Bilaoen/SVI_2022_Census_Tract.csv")
+
+svi_zcta <- read.csv("~/PH 699 Bilaoen/SVI_2022_Zip_Code.csv")
+```
+
+#Data Wrangling 
+When downloading SVI data, the entire state/region is being downloaded. In order to only have San Francisco data, we need to do some data cleaning. Code for both census tract and zipcode level SVI will be included.
+
+##Census Level filter
+```{r}
+svi_census <- svi_census %>% 
+  filter(COUNTY == "San Francisco County") %>% #filtering out for San Francisco County only 
+  rename(site = FIPS) %>%  #renaming to "site" so that when we join SVI to daymet data it is easier to work with 
+  select(where(~ !is.character(.))) %>% #removing columns that have letters as observations, not needed 
+  select(-ST, -STCNTY) %>% #removing state and city columns
+  filter(site != "6075980401") #removing the Farallones islands 
+```
+
+##Zipcode Level filter
+```{r}
+svi_zcta <-  svi_zcta %>% 
+  filter(grepl("^941", FIPS)) %>% #filtering out for zipcodes that start with 941 in the FIPS column 
+  filter(FIPS != "94128") #filtering out SFO 
+
+```
+
+
+#Data Wrangling 
+According to SVI documntation (https://svi.cdc.gov/map25/data/docs/SVI2022Documentation_ZCTA.pdf), a number/result of -999 means that there was no data available or the data was NULL. For the most accurate analysis, the -999 will be converted into a NA. Here we will only be filtering out NULL data for overall RPL themes, which look at overarching aspects of vulnerability. It is possible to filter out for single aspects of SVI and call them in and filter.
+
+RPL_THEMES = overall social vulnerability 
+RPL_THEME1 = socioeconomic status
+RPL_THEME2 = household characteristics
+RPL_THEME3 = racial & ethnic minority status
+RPL_THEME4 = housing type & transportation 
+
+Census Level
+```{r}
+svi_census <- svi_census %>% 
+  mutate( 
+    RPL_THEMES = na_if(RPL_THEMES,-999), #filtering out all NULL/non available data 
+    RPL_THEME1 = na_if(RPL_THEME1, -999), 
+    RPL_THEME2 = na_if(RPL_THEME2, -999), 
+    RPL_THEME3 = na_if(RPL_THEME3, -999), 
+    RPL_THEME4 = na_if(RPL_THEME4, -999)) %>% 
+  select(site,RPL_THEMES,RPL_THEME1,RPL_THEME2,RPL_THEME3,RPL_THEME4) #only keeping major themes for SVI
+```
+
+Zipcode Level -- note that there is missingness in zipcode 94188 (Bayview area)
+```{r}
+svi_zcta <- svi_zcta %>% 
+  mutate( 
+    RPL_THEMES = na_if(RPL_THEMES,-999), #filtering out all NULL/non available data 
+    RPL_THEME1 = na_if(RPL_THEME1, -999), 
+    RPL_THEME2 = na_if(RPL_THEME2, -999), 
+    RPL_THEME3 = na_if(RPL_THEME3, -999), 
+    RPL_THEME4 = na_if(RPL_THEME4, -999)) %>% 
+  select(FIPS,RPL_THEMES,RPL_THEME1,RPL_THEME2,RPL_THEME3,RPL_THEME4) #only keeping major themes for SVI 
+```
+
