@@ -1,0 +1,91 @@
+---
+title: "Building Data Code"
+author: "Mahal Bilaoen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+pacman::p_load(tidyverse,lubridate,stringr)
+```
+
+##About this data 
+All of the data sets associated with this file are all publicly available via SF Data Portal, which is the city of San Francisco's go to site to obtain data on the city. There is a lot of data to sift through and organize, especially if we're looking at different building types and where they are. The originial goal of downloading all of these data sets was to: 
+1. Determine the A/C stock in the city 
+2. Organize the city by building type
+3. Identify where the city has the most heat exposure and determine vulnerability by A/C stock in a particular area and/or by building type/age 
+
+#loading in the data 
+Building permit data is separated by before and after 01/01/2013, and it will be used to look at where any A/C related renovations are located. Tax roll and building audit data was mainly used to separate buildings by type, depending on how specific buildings were to be organized. Both data sets provide information about the buildings that could be useful. Due to data privacy, some of this data is available only on the zipcode level. 
+```{r}
+#building permit data
+before_2013 <- read.csv("~/PH 699 Bilaoen/Building_Permits_before_January_1,_2013_20260319.csv")
+after_2013 <- read.csv("~/PH 699 Bilaoen/Building_Permits_filed_on_or_after_January_1,_2013_20260319.csv")
+
+#tax data (building type)
+tax_rolls <- read.csv("~/PH 699 Bilaoen/Assessor_Historical_Secured_Property_Tax_Rolls_20260319.csv")
+
+#energy compliance data (building type)
+building_audits <- read.csv("~/PH 699 Bilaoen/Existing_Buildings_-_Basic_Info_and_Audit_Compliance_Status_20260319.csv")
+```
+
+#Wrangling A/C data 
+On regex: regex (regular expression) is a function that looks at character strings and filters them out based on how exact you want the match to be. 
+```{r}
+#list of all potential A/C related terms, case insensitive 
+ac_terms <- "(?i)\\b(air conditioning|A/C|HVAC|heat pump|ventilation|fan|duct|insulation|window|roof|weatherization)\\b"
+
+#filtering based on ac terms, but extra terms can be added 
+before_2013 <- before_2013 %>% 
+  filter(str_detect(Description, regex(ac_terms, ignore_case = TRUE))) 
+
+after_2013 <- after_2013 %>% 
+  filter(str_detect(Description, regex(ac_terms, ignore_case = TRUE))) 
+#hvac is already included in "air conditioning descp" 
+#ac is a semi-dead end 
+
+#checking if there are duplicate observations  
+#duplicates <- after_2013[after_2013$Location %in% after_2013$Location[duplicated(after_2013$Location)], ] 
+
+#merging all A/C data
+ac <- merge(before_2013, after_2013, all = TRUE) 
+
+ac <- ac %>% 
+  filter(Current.Status == "complete" | Current.Status == "issued") %>% #filters out only complete/finished permits 
+  mutate(
+    Current.Status.Date = mdy_hms(format(as.POSIXct(Current.Status.Date, format="%Y/%m/%d %I:%M:%S %p"), "%m/%d/%Y %I:%M:%S %p")), #formats the dates
+    year = year(Current.Status.Date), #take the year from the dates 
+    year_quartile = ntile(year,4)) #putting a gradient to see how old the acs were installed/renovated, easy to combine with temperature data and SVI data
+
+ac$Zipcode <- as.character(ac$Zipcode) 
+
+#only look at issued/complete 
+#there are expired OR cancelled ones as well 
+```
+
+#Looking at Crowdedness/Building Type via Building Audits
+```{r}
+#main types of buildings considered in this data set
+unique(building_audits$Property.Type...Self.Selected)
+# "Commercial"                 "Multifamily"                "Mixed Residential"          "Commercial - Port Facility" 
+
+#ranks building type on a 1-4, 1 = least, 4 = most or look at tax roll? 
+type_order <- c("Multifamily", "Mixed Residential", "Commercial",  "Commercial - Port Facility")  
+
+#applying the ranking to the building_audits data 
+building_audits <- building_audits %>% 
+  mutate(
+    rank = as.numeric(factor(Property.Type...Self.Selected, levels = type_order))
+  ) 
+```
+
+#Tax Roll data -- lots of building definitions 
+```{r}
+#multiple types of building 
+unique(tax_rolls$Use.Definition)
+#"Commercial Misc"           "Miscellaneous/Mixed-Use"   "Commercial Retail"         "Commercial Hotel"          "Commercial Office"        
+# "Multi-Family Residential"  "Single Family Residential" "Government"                "Industrial"                "" 
+```
+
