@@ -1,0 +1,141 @@
+---
+title: "Tree Canopy"
+author: "Mahal Bilaoen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+pacman::p_load(tidyverse, lubridate, sf, tigris, ggplot2,leaflet)
+```
+
+##Tree Canopy
+Since the SF Forest Plan (2013), the city has been interested in looking at increasing the amount of tree canopy to better support people and wildlife alike. For the purposes of our research, we will be looking at the increase of trees being planted as a proxy to better understand where the city is (or isn't) investing its resources. The specific data set we are accessing is the "Street Tree List" (https://data.sfgov.org/City-Infrastructure/Street-Tree-List/tkzw-k3nq/about_data) and will be filtering for 01/01/12 12:00:00 AM to 12/31/22 11:59:59 PM. 
+
+From here, we can choose to aggregate our data by trees being planted by year per census or track changes in various ways. 
+
+#Loading in Data
+```{r cars}
+trees <- read.csv("~/PINC 2026/Street_Tree_List_2012_2022.csv")
+
+```
+
+In order to map out the points of all of the trees in the city, we will be using a census tract level map of the city. The specific type of file that we are using in this case is a shapefile from the year 2020. (https://data.sfgov.org/Geographic-Locations-and-Boundaries/Analysis-Neighborhoods-2020-census-tracts-assigned/sevw-6tgi/about_data) Shapefiles are a collection geographic points, lines or polygons that can be "printed" into R and have different map layerings for it.  
+
+#adding shapefile path to map out trees  
+```{r}
+shapefile_path <- "C:/Users/meme1/OneDrive/Documents/PH 699 Bilaoen/Census Tract shp"
+
+shape_data <- st_read(shapefile_path)
+
+shape_data <- shape_data %>% 
+  filter(aland > 0, #land area only
+         st_coordinates(st_centroid(geometry))[,1] > -123) #removes weird water tracts, not perfect
+```
+#Data downloading for census tracts 
+```{r}
+#getting the census tracts for the city 
+sf_tracts <- tracts(
+  state = "CA",
+  county = "San Francisco",
+  year = 2020,
+  class = "sf"
+)
+```
+
+#Data Wrangling 
+```{r}
+#getting the years where each tree was planted
+sample_trees <- trees %>% 
+  mutate(
+    PlantDate = ymd_hms(PlantDate), #PlantDate was initially a crs, convert using lubridate and specifiying the date format
+    Year = year(PlantDate)) #extracting the year in which a tree was planted 
+
+#making a new data set with the only variables we need
+sf_tree <- sample_trees %>%
+  select(TreeID,Year, Latitude, Longitude) %>% 
+  filter(  #filtering out missingness of Lat/Long or else coordinates cannot be run 
+    !is.na(Longitude), 
+    !is.na(Latitude)
+  )
+```
+
+#adding census tracts to each coordinate 
+```{r}
+#converting the lat/long into readable coordinates in R 
+sf_tree <- st_as_sf(
+  sf_tree,
+  coords = c("Longitude", "Latitude"),
+  crs = 4326
+)
+
+#ensuring that the census tracts and tree data are using the same coordinate reference system(crs)
+sf_tracts_sample <- st_transform(sf_tracts, st_crs(sf_tree)) 
+
+#joining census tracts and tree data 
+sf_tree <- st_join(
+  sf_tree,
+  sf_tracts_sample %>% select(GEOID, NAME),
+  join = st_within
+)
+
+#census tracts have numerical names that we do not need 
+sf_tree <- sf_tree %>% 
+  select(-NAME)
+
+```
+
+#mapping out where trees are 
+```{r}
+
+#base map, plotting every tree with no specific idea 
+ggplot() +
+  geom_sf(data = shape_data, fill = NA, color = "gray50") +
+  geom_sf(data = sf_tree, size = 0.5) +
+  theme_minimal()
+
+#assigning points color by year planted 
+ggplot() +
+  geom_sf(data = shape_data, fill = NA, color = "gray50") +
+  geom_sf(data = sf_tree, aes(color = as.factor(Year)), size = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Tree Planting by Year", 
+    color = "Year Planted"
+  )
+```
+
+#interactive map via leaflet 
+```{r}
+leaflet_base <- leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = sf_tracts_sample, 
+    fill = FALSE, 
+    color = "gray",
+    weight = 1
+  )
+
+for (yr in sort(unique(sf_tree$Year))) {
+  
+  m <- leaflet_base %>% 
+    addCircleMarkers(
+      data = subset(sf_tree, Year == yr),
+      radius = 3,
+      stroke = FALSE,
+      fillOpacity = 0.8,
+      group = as.character(yr),
+      popup = ~paste(
+        "<b>Tree ID:</b>", TreeID,
+        "<br><b>Year planted:</b>", Year))
+}
+
+m %>%
+  addLayersControl(
+    overlayGroups = as.character(sort(unique(sf_tree$Year))),
+    options = layersControlOptions(collapsed = FALSE))
+```
+
+
